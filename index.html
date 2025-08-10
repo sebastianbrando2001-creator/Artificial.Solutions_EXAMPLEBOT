@@ -1,353 +1,822 @@
-# AI-Enhanced SMS Reminder System with Google Gemini
-# Run this in Google Colab for free SMS reminders with AI personalization
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bright Smile Dental - AI Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-# Install required packages (run this cell first in Colab)
-# !pip install google-generativeai twilio pandas
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #f0f8ff 0%, #e6f3ff 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
 
-import google.generativeai as genai
-import pandas as pd
-from twilio.rest import Client
-from datetime import datetime, timedelta
-import time
-import json
+        .chatbot-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 123, 191, 0.1);
+            max-width: 400px;
+            width: 100%;
+            overflow: hidden;
+            position: relative;
+        }
 
-# Configuration
-CONFIG = {
-    # Google AI Studio API (FREE)
-    'google_api_key': 'YOUR_GOOGLE_AI_STUDIO_API_KEY',  # Get from aistudio.google.com
-    
-    # Twilio Configuration
-    'twilio_sid': 'YOUR_TWILIO_ACCOUNT_SID',
-    'twilio_token': 'YOUR_TWILIO_AUTH_TOKEN', 
-    'twilio_phone': '+1234567890',  # Your Twilio number
-    
-    # Clinic Information
-    'clinic_name': 'Bright Smile Dental',
-    'clinic_phone': '(555) 123-4567',
-    'clinic_address': '123 Main Street, Downtown'
-}
+        .chatbot-header {
+            background: linear-gradient(135deg, #007bbf 0%, #005a8a 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+        }
 
-def setup_ai():
-    """Initialize Google AI"""
-    genai.configure(api_key=CONFIG['google_api_key'])
-    return genai.GenerativeModel('gemini-1.5-flash')
+        .chatbot-header h1 {
+            font-size: 1.5em;
+            margin-bottom: 5px;
+        }
 
-def create_personalized_reminder(model, patient_name, treatment_type, appointment_date, patient_notes=None):
-    """
-    Use AI to create personalized appointment reminders
-    """
-    formatted_date = appointment_date.strftime("%B %d, %Y at %I:%M %p")
-    
-    prompt = f"""
-    Create a friendly, professional SMS appointment reminder for a dental patient. 
+        .chatbot-header p {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
 
-    Patient Details:
-    - Name: {patient_name}
-    - Treatment: {treatment_type}
-    - Appointment: {formatted_date}
-    - Clinic: {CONFIG['clinic_name']}
-    - Phone: {CONFIG['clinic_phone']}
-    
-    Additional notes: {patient_notes or 'None'}
-    
-    Requirements:
-    - Keep it under 160 characters if possible (SMS limit)
-    - Be warm and reassuring (many people have dental anxiety)
-    - Include key preparation instructions for the specific treatment
-    - Add a touch of personalization
-    - Include clinic phone for questions
-    - Use emojis sparingly but effectively
-    
-    Treatment-specific tips:
-    - Cleaning: Brush beforehand, arrive 15 min early
-    - Filling: Light meal beforehand, bring headphones if anxious
-    - Crown: Avoid hard foods day before
-    - Whitening: Avoid coffee/tea day before
-    - Extraction: Arrange ride home, eat soft foods after
-    - Emergency: We're here to help, don't worry
-    
-    Write just the SMS message, nothing else.
-    """
-    
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip()
-    except Exception as e:
-        # Fallback message if AI fails
-        return f"Hi {patient_name}! Reminder: {treatment_type} appointment tomorrow at {formatted_date}. Please arrive 15 min early. Questions? Call {CONFIG['clinic_phone']} 🦷"
+        .ai-indicator {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.7em;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
 
-def send_ai_reminder(model, patient_name, patient_phone, appointment_date, treatment_type, patient_notes=None):
-    """
-    Send AI-generated personalized SMS reminder
-    """
-    try:
-        # Generate personalized message using AI
-        message_body = create_personalized_reminder(
-            model, patient_name, treatment_type, appointment_date, patient_notes
-        )
-        
-        # Send SMS via Twilio
-        client = Client(CONFIG['twilio_sid'], CONFIG['twilio_token'])
-        message = client.messages.create(
-            body=message_body,
-            from_=CONFIG['twilio_phone'],
-            to=patient_phone
-        )
-        
-        print(f"✅ AI reminder sent to {patient_name}")
-        print(f"   📱 Message: {message_body}")
-        print(f"   🆔 SID: {message.sid}")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Failed to send AI reminder to {patient_name}: {str(e)}")
-        return False
+        .ai-dot {
+            width: 6px;
+            height: 6px;
+            background: #00ff88;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
 
-def load_appointments_with_ai_data(csv_file_path):
-    """
-    Load appointment data with additional fields for AI personalization
-    Expected columns: name, phone, appointment_date, treatment_type, notes, patient_anxiety_level, preferred_communication_style
-    """
-    try:
-        df = pd.read_csv(csv_file_path)
-        df['appointment_date'] = pd.to_datetime(df['appointment_date'])
-        return df
-    except Exception as e:
-        print(f"Error loading CSV: {str(e)}")
-        return None
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
 
-def analyze_patient_sentiment(model, patient_notes):
-    """
-    Use AI to analyze patient sentiment and adjust message tone
-    """
-    if not patient_notes:
-        return "neutral"
-    
-    prompt = f"""
-    Analyze this patient note for sentiment and anxiety level:
-    "{patient_notes}"
-    
-    Respond with just one word:
-    - "anxious" if they seem worried or nervous
-    - "excited" if they seem positive or eager
-    - "neutral" if no clear emotion
-    - "pain" if they mention discomfort or emergency
-    """
-    
-    try:
-        response = model.generate_content(prompt)
-        return response.text.strip().lower()
-    except:
-        return "neutral"
+        .chat-messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8fbff;
+        }
 
-def send_ai_powered_daily_reminders():
-    """
-    Main function with AI-enhanced personalization
-    """
-    print(f"🤖 AI-Enhanced Reminder System Starting...")
-    print(f"🔍 Checking appointments for {(datetime.now() + timedelta(days=1)).strftime('%B %d, %Y')}")
-    
-    # Initialize AI
-    try:
-        model = setup_ai()
-        print("✅ Google AI connected successfully")
-    except Exception as e:
-        print(f"❌ AI setup failed: {e}")
-        return
-    
-    # Load appointments
-    appointments_df = load_appointments_with_ai_data('appointments_enhanced.csv')
-    
-    if appointments_df is None:
-        print("❌ Failed to load appointments data")
-        return
-    
-    # Filter for tomorrow's appointments
-    tomorrow = datetime.now() + timedelta(days=1)
-    tomorrow_appointments = appointments_df[
-        appointments_df['appointment_date'].dt.date == tomorrow.date()
-    ]
-    
-    if tomorrow_appointments.empty:
-        print("📅 No appointments found for tomorrow")
-        return
-    
-    print(f"📱 Found {len(tomorrow_appointments)} appointments. Generating AI reminders...")
-    
-    successful_sends = 0
-    
-    for index, row in tomorrow_appointments.iterrows():
-        # Analyze patient sentiment for tone adjustment
-        sentiment = analyze_patient_sentiment(model, row.get('notes', ''))
-        
-        success = send_ai_reminder(
-            model=model,
-            patient_name=row['name'],
-            patient_phone=row['phone'], 
-            appointment_date=row['appointment_date'],
-            treatment_type=row['treatment_type'],
-            patient_notes=row.get('notes', None)
-        )
-        
-        if success:
-            successful_sends += 1
-        
-        # Small delay between messages
-        time.sleep(2)
-    
-    print(f"\n🎯 AI Reminder Summary:")
-    print(f"   Total appointments: {len(tomorrow_appointments)}")
-    print(f"   Successful AI reminders: {successful_sends}")
-    print(f"   Failed reminders: {len(tomorrow_appointments) - successful_sends}")
+        .message {
+            margin-bottom: 15px;
+            animation: fadeIn 0.3s ease-in;
+        }
 
-def create_enhanced_sample_csv():
-    """
-    Create sample CSV with enhanced fields for AI personalization
-    """
-    sample_data = {
-        'name': [
-            'John Smith',
-            'Sarah Johnson', 
-            'Mike Davis',
-            'Emily Wilson',
-            'David Brown'
-        ],
-        'phone': [
-            '+1234567890',
-            '+1987654321',
-            '+1555123456', 
-            '+1444987654',
-            '+1333444555'
-        ],
-        'appointment_date': [
-            '2025-08-11 10:00:00',  # Tomorrow
-            '2025-08-11 14:30:00', 
-            '2025-08-11 09:15:00',
-            '2025-08-11 16:00:00',
-            '2025-08-11 11:30:00'
-        ],
-        'treatment_type': [
-            'Cleaning & Checkup',
-            'Filling',
-            'Crown Placement', 
-            'Teeth Whitening',
-            'Tooth Extraction'
-        ],
-        'notes': [
-            'First time patient, mentioned anxiety about dental visits',
-            'Previous patient, very comfortable with procedures',
-            'Needs crown for back molar, prefers morning appointments',
-            'Excited about whitening for wedding next month',
-            'Emergency extraction, was in pain last week'
-        ],
-        'patient_anxiety_level': [
-            'high',
-            'low',
-            'medium', 
-            'low',
-            'medium'
-        ],
-        'preferred_communication_style': [
-            'reassuring',
-            'direct',
-            'detailed',
-            'friendly', 
-            'supportive'
-        ]
-    }
-    
-    df = pd.DataFrame(sample_data)
-    df.to_csv('appointments_enhanced.csv', index=False)
-    print("✅ Enhanced sample appointments_enhanced.csv created!")
-    print("📋 Includes fields for AI personalization:")
-    print("   - Patient notes for context")
-    print("   - Anxiety levels for tone adjustment") 
-    print("   - Communication preferences")
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
 
-# Advanced features
-def send_follow_up_survey(model, patient_name, patient_phone, treatment_type):
-    """
-    Send AI-generated follow-up survey after appointment
-    """
-    prompt = f"""
-    Create a brief, friendly follow-up text message for a patient who just had {treatment_type} at {CONFIG['clinic_name']}.
-    
-    Requirements:
-    - Thank them for coming
-    - Ask how they're feeling (1-2 simple questions)
-    - Invite feedback
-    - Provide aftercare tips specific to {treatment_type}
-    - Keep under 160 characters
-    - Include clinic phone for questions
-    
-    Write just the SMS message.
-    """
-    
-    try:
-        response = model.generate_content(prompt)
-        message_body = response.text.strip()
-        
-        client = Client(CONFIG['twilio_sid'], CONFIG['twilio_token'])
-        message = client.messages.create(
-            body=message_body,
-            from_=CONFIG['twilio_phone'],
-            to=patient_phone
-        )
-        
-        print(f"📋 Follow-up survey sent to {patient_name}")
-        return True
-    except Exception as e:
-        print(f"❌ Failed to send follow-up to {patient_name}: {e}")
-        return False
+        .bot-message {
+            background: white;
+            padding: 12px 16px;
+            border-radius: 18px 18px 18px 5px;
+            box-shadow: 0 2px 10px rgba(0, 123, 191, 0.1);
+            max-width: 80%;
+            position: relative;
+        }
 
-def generate_appointment_insights(model, appointments_df):
-    """
-    Use AI to analyze appointment patterns and generate insights
-    """
-    # Prepare data summary
-    summary = {
-        'total_appointments': len(appointments_df),
-        'treatment_types': appointments_df['treatment_type'].value_counts().to_dict(),
-        'common_concerns': appointments_df['notes'].tolist(),
-        'peak_hours': appointments_df['appointment_date'].dt.hour.value_counts().head(3).to_dict()
-    }
-    
-    prompt = f"""
-    Analyze this dental clinic appointment data and provide insights:
-    
-    {json.dumps(summary, indent=2)}
-    
-    Please provide:
-    1. Most popular treatments
-    2. Common patient concerns
-    3. Busiest appointment times
-    4. Recommendations for clinic operations
-    5. Patient communication suggestions
-    
-    Keep it concise and actionable.
-    """
-    
-    try:
-        response = model.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"Could not generate insights: {e}"
+        .bot-message::before {
+            content: '🤖';
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            background: #007bbf;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7em;
+        }
 
-# Main execution
-if __name__ == "__main__":
-    print("🦷🤖 AI-Enhanced Dental Reminder System")
-    print("=" * 50)
-    
-    # Create enhanced sample data
-    create_enhanced_sample_csv()
-    
-    # Send AI-powered reminders
-    send_ai_powered_daily_reminders()
-    
-    # Optional: Generate insights
-    # appointments_df = load_appointments_with_ai_data('appointments_enhanced.csv')
-    # if appointments_df is not None:
-    #     model = setup_ai()
-    #     insights = generate_appointment_insights(model, appointments_df)
-    #     print("\n📊 AI INSIGHTS:")
-    #     print(insights)
+        .user-message {
+            background: #007bbf;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 18px 18px 5px 18px;
+            margin-left: auto;
+            max-width: 80%;
+            text-align: right;
+        }
+
+        .thinking-indicator {
+            display: none;
+            padding: 12px 16px;
+            background: white;
+            border-radius: 18px 18px 18px 5px;
+            box-shadow: 0 2px 10px rgba(0, 123, 191, 0.1);
+            max-width: 80%;
+            color: #666;
+            font-style: italic;
+        }
+
+        .thinking-dots {
+            display: inline-block;
+        }
+
+        .thinking-dots::after {
+            content: '';
+            animation: thinking 1.5s infinite;
+        }
+
+        @keyframes thinking {
+            0% { content: '.'; }
+            33% { content: '..'; }
+            66% { content: '...'; }
+            100% { content: '.'; }
+        }
+
+        .chat-input-container {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .chat-input {
+            width: 100%;
+            padding: 12px 50px 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .chat-input:focus {
+            border-color: #007bbf;
+        }
+
+        .send-button {
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: #007bbf;
+            border: none;
+            border-radius: 50%;
+            width: 35px;
+            height: 35px;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s;
+        }
+
+        .send-button:hover {
+            background: #005a8a;
+        }
+
+        .send-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .quick-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .quick-btn {
+            background: #007bbf;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .quick-btn:hover {
+            background: #005a8a;
+            transform: translateY(-1px);
+        }
+
+        .form-container {
+            display: none;
+            padding: 20px;
+            background: white;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: bold;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+            font-family: inherit;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #007bbf;
+        }
+
+        .submit-btn {
+            background: #007bbf;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.3s;
+        }
+
+        .submit-btn:hover {
+            background: #005a8a;
+        }
+
+        .submit-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .privacy-note {
+            font-size: 0.8em;
+            color: #666;
+            text-align: center;
+            margin-top: 15px;
+            padding: 10px;
+            background: #f0f8ff;
+            border-radius: 8px;
+        }
+
+        .back-btn {
+            background: #ccc;
+            color: #333;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+
+        .back-btn:hover {
+            background: #bbb;
+        }
+
+        .integration-status {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #00ff88;
+            color: #333;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            z-index: 1000;
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 480px) {
+            .chatbot-container {
+                max-width: 100%;
+                margin: 0;
+                border-radius: 0;
+                height: 100vh;
+            }
+            
+            .chat-messages {
+                height: calc(100vh - 200px);
+            }
+            
+            .integration-status {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chatbot-container">
+        <!-- Chat Interface -->
+        <div id="chat-view">
+            <div class="chatbot-header">
+                <div class="ai-indicator">
+                    <div class="ai-dot"></div>
+                    <span>AI Powered</span>
+                </div>
+                <h1>🦷 Bright Smile Dental</h1>
+                <p>Intelligent AI Assistant</p>
+            </div>
+            
+            <div class="chat-messages" id="chatMessages">
+                <div class="message">
+                    <div class="bot-message">
+                        Hi! I'm your AI-powered assistant for Bright Smile Dental. I can help you with appointments, answer questions about treatments, insurance, and provide personalized dental advice. What would you like to know?
+                    </div>
+                </div>
+                <div class="thinking-indicator" id="thinkingIndicator">
+                    <span class="thinking-dots">AI is thinking</span>
+                </div>
+            </div>
+            
+            <div class="chat-input-container">
+                <div class="input-wrapper">
+                    <input type="text" class="chat-input" id="chatInput" placeholder="Ask me anything about dental care..." />
+                    <button class="send-button" id="sendButton">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="quick-buttons">
+                    <button class="quick-btn" onclick="sendQuickMessage('What are your office hours?')">Hours</button>
+                    <button class="quick-btn" onclick="sendQuickMessage('What services do you offer?')">Services</button>
+                    <button class="quick-btn" onclick="sendQuickMessage('Do you accept my insurance?')">Insurance</button>
+                    <button class="quick-btn" onclick="sendQuickMessage('I want to book an appointment')">Book Now</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Appointment Form -->
+        <div id="form-view" class="form-container">
+            <button class="back-btn" onclick="showChat()">← Back to Chat</button>
+            <h3 style="color: #007bbf; margin-bottom: 20px;">Book Your Appointment</h3>
+            
+            <form id="appointmentForm">
+                <div class="form-group">
+                    <label for="name">Full Name *</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="phone">Phone Number *</label>
+                    <input type="tel" id="phone" name="phone" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email Address *</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="date">Preferred Date *</label>
+                    <input type="date" id="date" name="date" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="treatment">Treatment Type *</label>
+                    <select id="treatment" name="treatment" required>
+                        <option value="">Select a service</option>
+                        <option value="cleaning">Cleaning & Checkup</option>
+                        <option value="filling">Filling</option>
+                        <option value="crown">Crown/Bridge</option>
+                        <option value="whitening">Teeth Whitening</option>
+                        <option value="extraction">Tooth Extraction</option>
+                        <option value="consultation">Consultation</option>
+                        <option value="emergency">Emergency Visit</option>
+                        <option value="orthodontics">Orthodontics</option>
+                        <option value="implant">Dental Implant</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="notes">Additional Notes (Optional)</label>
+                    <textarea id="notes" name="notes" placeholder="Any specific concerns or requests?"></textarea>
+                </div>
+                
+                <button type="submit" class="submit-btn" id="formSubmitBtn">Book Appointment</button>
+            </form>
+            
+            <div class="privacy-note">
+                🔒 We do not store sensitive health data. For emergencies, please call our office directly at (555) 123-4567.
+            </div>
+        </div>
+    </div>
+
+    <div class="integration-status" id="integrationStatus">
+        ✅ AI Connected
+    </div>
+
+    <script>
+        // Configuration - Update these with your actual API keys and URLs
+        const CONFIG = {
+            // Google AI Studio Configuration (FREE!)
+            google: {
+                apiKey: 'YOUR_GOOGLE_AI_STUDIO_API_KEY_HERE', // Get from https://aistudio.google.com/app/apikey
+                model: 'gemini-1.5-flash', // Fast and free model
+                maxTokens: 500
+            },
+            
+            // Zapier Webhook URLs
+            zapier: {
+                appointmentWebhook: 'YOUR_ZAPIER_APPOINTMENT_WEBHOOK_URL', // Create in Zapier
+                chatLogWebhook: 'YOUR_ZAPIER_CHAT_LOG_WEBHOOK_URL' // Optional: log all conversations
+            },
+            
+            // Make.com (formerly Integromat) webhook
+            make: {
+                webhookUrl: 'YOUR_MAKE_WEBHOOK_URL'
+            },
+            
+            // Custom webhook endpoint
+            customWebhook: {
+                url: 'YOUR_CUSTOM_WEBHOOK_URL'
+            },
+            
+            // Clinic-specific information for AI context
+            clinicInfo: {
+                name: "Bright Smile Dental",
+                phone: "(555) 123-4567",
+                address: "123 Main Street, Downtown",
+                hours: "Monday-Friday 8AM-6PM, Saturday 9AM-3PM, Sunday Closed",
+                services: "General dentistry, cosmetic dentistry, orthodontics, oral surgery, emergency care",
+                insurance: "Blue Cross, Aetna, Delta Dental, Cigna, and most major insurance plans",
+                emergencyHours: "24/7 emergency line available"
+            }
+        };
+
+        // AI System Prompt
+        const systemPrompt = `You are an AI assistant for ${CONFIG.clinicInfo.name}, a professional dental clinic. 
+
+CLINIC DETAILS:
+- Phone: ${CONFIG.clinicInfo.phone}
+- Address: ${CONFIG.clinicInfo.address}
+- Hours: ${CONFIG.clinicInfo.hours}
+- Services: ${CONFIG.clinicInfo.services}
+- Insurance: ${CONFIG.clinicInfo.insurance}
+
+INSTRUCTIONS:
+1. Be helpful, professional, and empathetic
+2. Answer dental questions with accurate, general information
+3. Always recommend consulting the dentist for specific medical advice
+4. If someone wants to book an appointment, offer to open the booking form
+5. For emergencies, provide the emergency number immediately
+6. Keep responses concise but informative
+7. Never provide specific medical diagnoses or treatment plans
+8. Be friendly and reassuring about dental anxiety
+
+IMPORTANT: If someone asks to book an appointment or schedule a visit, respond with exactly: "BOOKING_REQUEST" followed by your normal response.`;
+
+        // Chat functionality
+        let conversationHistory = [];
+
+        async function callGoogleAI(message) {
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${CONFIG.google.model}:generateContent?key=${CONFIG.google.apiKey}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{
+                                text: `${systemPrompt}\n\nConversation History:\n${conversationHistory.map(msg => `${msg.role}: ${msg.content}`).join('\n')}\n\nUser: ${message}\n\nAssistant:`
+                            }]
+                        }],
+                        generationConfig: {
+                            maxOutputTokens: CONFIG.google.maxTokens,
+                            temperature: 0.7,
+                        },
+                        safetySettings: [
+                            {
+                                category: "HARM_CATEGORY_HARASSMENT",
+                                threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                            },
+                            {
+                                category: "HARM_CATEGORY_HATE_SPEECH", 
+                                threshold: "BLOCK_MEDIUM_AND_ABOVE"
+                            }
+                        ]
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`Google AI API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+                }
+
+                const data = await response.json();
+                return data.candidates[0].content.parts[0].text.trim();
+            } catch (error) {
+                console.error('Google AI API Error:', error);
+                return "I'm having trouble connecting to my AI brain right now. Please call our office at " + CONFIG.clinicInfo.phone + " for immediate assistance, or try again in a moment.";
+            }
+        }
+
+        function addMessage(message, isUser = false) {
+            const messagesContainer = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            
+            const messageContent = document.createElement('div');
+            messageContent.className = isUser ? 'user-message' : 'bot-message';
+            messageContent.textContent = message;
+            
+            messageDiv.appendChild(messageContent);
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // Hide thinking indicator
+            document.getElementById('thinkingIndicator').style.display = 'none';
+        }
+
+        function showThinking() {
+            const indicator = document.getElementById('thinkingIndicator');
+            indicator.style.display = 'block';
+            document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
+        }
+
+        async function sendMessage(message) {
+            if (!message.trim()) return;
+
+            const sendButton = document.getElementById('sendButton');
+            const chatInput = document.getElementById('chatInput');
+            
+            // Disable input while processing
+            sendButton.disabled = true;
+            chatInput.disabled = true;
+            
+            // Add user message
+            addMessage(message, true);
+            
+            // Add to conversation history
+            conversationHistory.push({ role: 'user', content: message });
+            
+            // Show thinking indicator
+            showThinking();
+            
+            // Log conversation to webhook (optional)
+            logConversation('user', message);
+            
+            try {
+                // Get AI response
+                const aiResponse = await callGoogleAI(message);
+                
+                // Check if this is a booking request
+                if (aiResponse.startsWith('BOOKING_REQUEST')) {
+                    const cleanResponse = aiResponse.replace('BOOKING_REQUEST', '').trim();
+                    addMessage(cleanResponse);
+                    conversationHistory.push({ role: 'assistant', content: cleanResponse });
+                    
+                    // Show booking form after a brief delay
+                    setTimeout(() => {
+                        showForm();
+                    }, 1500);
+                } else {
+                    addMessage(aiResponse);
+                    conversationHistory.push({ role: 'assistant', content: aiResponse });
+                }
+                
+                // Log AI response
+                logConversation('assistant', aiResponse);
+                
+            } catch (error) {
+                addMessage("I apologize, but I'm experiencing technical difficulties. Please call our office at " + CONFIG.clinicInfo.phone + " for assistance.");
+            }
+            
+            // Re-enable input
+            sendButton.disabled = false;
+            chatInput.disabled = false;
+            chatInput.focus();
+        }
+
+        function sendQuickMessage(message) {
+            document.getElementById('chatInput').value = message;
+            sendMessage(message);
+        }
+
+        // Webhook integrations
+        async function sendToZapier(webhookUrl, data) {
+            if (!webhookUrl || webhookUrl === 'YOUR_ZAPIER_APPOINTMENT_WEBHOOK_URL') return;
+            
+            try {
+                await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+            } catch (error) {
+                console.error('Zapier webhook error:', error);
+            }
+        }
+
+        async function sendToMake(data) {
+            if (!CONFIG.make.webhookUrl || CONFIG.make.webhookUrl === 'YOUR_MAKE_WEBHOOK_URL') return;
+            
+            try {
+                await fetch(CONFIG.make.webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+            } catch (error) {
+                console.error('Make.com webhook error:', error);
+            }
+        }
+
+        async function sendToCustomWebhook(data) {
+            if (!CONFIG.customWebhook.url || CONFIG.customWebhook.url === 'YOUR_CUSTOM_WEBHOOK_URL') return;
+            
+            try {
+                await fetch(CONFIG.customWebhook.url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+            } catch (error) {
+                console.error('Custom webhook error:', error);
+            }
+        }
+
+        function logConversation(role, message) {
+            const logData = {
+                timestamp: new Date().toISOString(),
+                role: role,
+                message: message,
+                sessionId: getSessionId(),
+                clinicName: CONFIG.clinicInfo.name
+            };
+            
+            // Send to all configured webhooks
+            sendToZapier(CONFIG.zapier.chatLogWebhook, logData);
+            sendToMake(logData);
+            sendToCustomWebhook(logData);
+        }
+
+        function getSessionId() {
+            let sessionId = sessionStorage.getItem('chatSessionId');
+            if (!sessionId) {
+                sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                sessionStorage.setItem('chatSessionId', sessionId);
+            }
+            return sessionId;
+        }
+
+        // Form handling
+        function showForm() {
+            document.getElementById('chat-view').style.display = 'none';
+            document.getElementById('form-view').style.display = 'block';
+        }
+
+        function showChat() {
+            document.getElementById('chat-view').style.display = 'block';
+            document.getElementById('form-view').style.display = 'none';
+        }
+
+        // Event listeners
+        document.getElementById('chatInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const message = this.value.trim();
+                if (message) {
+                    sendMessage(message);
+                    this.value = '';
+                }
+            }
+        });
+
+        document.getElementById('sendButton').addEventListener('click', function() {
+            const message = document.getElementById('chatInput').value.trim();
+            if (message) {
+                sendMessage(message);
+                document.getElementById('chatInput').value = '';
+            }
+        });
+
+        // Set minimum date to today
+        document.getElementById('date').min = new Date().toISOString().split('T')[0];
+
+        // Handle form submission
+        document.getElementById('appointmentForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('formSubmitBtn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Booking...';
+            
+            // Get form data
+            const formData = new FormData(this);
+            const appointmentData = {
+                timestamp: new Date().toISOString(),
+                name: formData.get('name'),
+                phone: formData.get('phone'),
+                email: formData.get('email'),
+                date: formData.get('date'),
+                treatment: formData.get('treatment'),
+                notes: formData.get('notes'),
+                sessionId: getSessionId(),
+                clinicName: CONFIG.clinicInfo.name,
+                source: 'AI Chatbot'
+            };
+            
+            try {
+                // Send to all configured webhooks
+                await Promise.all([
+                    sendToZapier(CONFIG.zapier.appointmentWebhook, appointmentData),
+                    sendToMake(appointmentData),
+                    sendToCustomWebhook(appointmentData)
+                ]);
+                
+                showConfirmation(appointmentData.name, appointmentData.date, appointmentData.treatment);
+            } catch (error) {
+                console.error('Form submission error:', error);
+                submitBtn.textContent = 'Try Again';
+                alert('There was an error booking your appointment. Please call our office at ' + CONFIG.clinicInfo.phone);
+            }
+            
+            submitBtn.disabled = false;
+        });
+
+        function showConfirmation(name, date, treatment) {
+            const formView = document.getElementById('form-view');
+            formView.innerHTML = `
+                <div style="text-align: center; padding: 40px 20px;">
+                    <div style="font-size: 3em; margin-bottom: 20px;">✅</div>
+                    <h3 style="color: #007bbf; margin-bottom: 15px;">Appointment Request Sent!</h3>
+                    <p style="margin-bottom: 10px;"><strong>Name:</strong> ${name}</p>
+                    <p style="margin-bottom: 10px;"><strong>Date:</strong> ${new Date(date).toLocaleDateString()}</p>
+                    <p style="margin-bottom: 20px;"><strong>Service:</strong> ${treatment}</p>
+                    <p style="color: #666; margin-bottom: 20px;">
+                        Our team will contact you within 2 hours to confirm your appointment time. 
+                        You'll receive SMS and email confirmations!
+                    </p>
+                    <button class="submit-btn" onclick="resetChat()" style="margin-bottom: 10px;">Book Another Appointment</button>
+                    <button class="back-btn" onclick="showChat()" style="width: 100%;">Continue Chatting</button>
+                    <div class="privacy-note" style="margin-top: 20px;">
+                        🔒 We do not store sensitive health data. For emergencies, please call our office directly at ${CONFIG.clinicInfo.phone}.
+                    </div>
+                </div>
+            `;
+        }
+
+        function resetChat() {
+            location.reload();
+        }
+
+        // Check API connection status
+        function checkAPIConnection() {
+            const status = document.getElementById('integrationStatus');
+            if (!CONFIG.google.apiKey || CONFIG.google.apiKey === 'YOUR_GOOGLE_AI_STUDIO_API_KEY_HERE') {
+                status.textContent = '⚠️ Configure API';
+                status.style.background = '#ff6b6b';
+                status.style.color = 'white';
+            }
+        }
+
+        // Initialize
+        window.onload = function() {
+            checkAPIConnection();
+            
+            setTimeout(() => {
+                addMessage("I'm powered by advanced AI and can understand natural language! Feel free to ask me anything about dental care, procedures, insurance, or our services. What would you like to know?");
+            }, 1000);
+        };
+    </script>
+</body>
+</html>
